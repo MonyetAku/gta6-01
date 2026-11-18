@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solmarina — an open-world crime game</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1420; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #eef1f5; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; }
+  #hud.on { display: block; }
+  .panel { position: absolute; background: rgba(10, 16, 26, 0.62); border: 1px solid rgba(255,255,255,0.16); border-radius: 10px; padding: 8px 12px; backdrop-filter: blur(2px); }
+  #stars { top: 12px; left: 12px; font-size: 26px; letter-spacing: 3px; color: #ffd94a; text-shadow: 0 0 8px rgba(0,0,0,0.7); }
+  #cash { top: 12px; left: 12px; margin-top: 44px; font-size: 20px; font-weight: 700; color: #7be495; }
+  #clock { top: 12px; right: 12px; font-size: 18px; font-weight: 600; }
+  #objective { top: 12px; left: 50%; transform: translateX(-50%); font-size: 15px; max-width: 46vw; text-align: center; }
+  #health { left: 12px; bottom: 206px; width: 180px; }
+  #health .label { font-size: 12px; opacity: 0.85; display: flex; justify-content: space-between; }
+  #health-bar { height: 10px; background: rgba(255,255,255,0.18); border-radius: 5px; margin-top: 4px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #58c96b; border-radius: 5px; }
+  #minimap { position: absolute; left: 12px; bottom: 12px; width: 180px; height: 180px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.35); background: #0e1420; }
+  #speed { right: 12px; bottom: 12px; text-align: right; min-width: 120px; }
+  #speed-num { font-size: 34px; font-weight: 800; line-height: 1; }
+  #speed-unit { font-size: 13px; opacity: 0.8; }
+  #ammo { right: 12px; bottom: 86px; font-size: 18px; font-weight: 600; text-align: right; }
+  #toast { position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); background: rgba(10,16,26,0.78); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 10px 16px; font-size: 16px; opacity: 0; transition: opacity 0.3s; max-width: 70vw; text-align: center; }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; text-align: center; background: linear-gradient(180deg, rgba(8,20,38,0.55), rgba(8,20,38,0.82)); z-index: 10; }
+  .screen h1 { font-size: 64px; margin: 0; letter-spacing: 6px; color: #ffd94a; text-shadow: 0 4px 24px rgba(0,0,0,0.6); }
+  .screen h2 { font-size: 20px; margin: 6px 0 18px; font-weight: 500; color: #cfe3f5; }
+  .screen p { max-width: 560px; line-height: 1.55; color: #dbe7f2; }
+  .screen .controls { font-size: 14px; line-height: 1.9; background: rgba(255,255,255,0.07); border-radius: 10px; padding: 12px 22px; margin: 14px 0; }
+  .screen button { pointer-events: auto; font-size: 18px; font-weight: 700; padding: 12px 28px; margin: 6px; border: none; border-radius: 10px; background: #ffd94a; color: #1a1a1a; cursor: pointer; }
+  .screen button.secondary { background: rgba(255,255,255,0.16); color: #eef1f5; }
+  .screen button:hover { filter: brightness(1.12); }
+  #mission-list { text-align: left; font-size: 15px; line-height: 2; margin: 10px 0 18px; }
+  .mission-row.done { color: #7be495; }
+  .mission-row.current { color: #ffd94a; font-weight: 700; }
+  #save-note { font-size: 13px; opacity: 0.75; margin-top: 10px; }
+</style>
+<script type="importmap">{"imports": {"three": "./vendor/three.module.min.js"}}</script>
+</head>
+<body>
+<canvas id="game" aria-label="Solmarina: an open-world crime game. Drive, steal cars, outrun the police and finish jobs."></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div class="panel" id="stars">☆☆☆☆☆</div>
+  <div class="panel" id="cash">$0</div>
+  <div class="panel" id="clock">09:00</div>
+  <div class="panel" id="objective"></div>
+  <div class="panel" id="health">
+    <div class="label"><span>RIO VEGA</span><span id="health-num">100</span></div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+  </div>
+  <canvas id="minimap" width="180" height="180"></canvas>
+  <div class="panel" id="speed"><span id="speed-num">—</span> <span id="speed-unit"></span></div>
+  <div class="panel" id="ammo">12 / 48</div>
+  <div id="toast"></div>
+</div>
+
+<div class="screen" id="title-screen" style="display:flex">
+  <h1>SOLMARINA</h1>
+  <h2>An open-world crime game — sun, sea, and trouble.</h2>
+  <p>Rio Vega came to Solmarina to drive. One bad fare later, the whole
+  underworld knows his name. Steal cars, outrun the Solmarina PD, and finish
+  five jobs to become King of Solmarina.</p>
+  <div class="controls">
+    <b>W A S D</b> move / drive &nbsp;·&nbsp; <b>Shift</b> run &nbsp;·&nbsp; <b>Space</b> jump / handbrake<br>
+    <b>E</b> steal / enter / exit car &nbsp;·&nbsp; <b>Click</b> shoot &nbsp;·&nbsp; <b>F</b> melee &nbsp;·&nbsp; <b>R</b> reload<br>
+    <b>Drag mouse</b> look around &nbsp;·&nbsp; <b>Esc</b> pause &nbsp;·&nbsp; <b>M</b> mute
+  </div>
+  <div>
+    <button id="start-btn" type="button">Start new game</button>
+    <button id="continue-btn" type="button" class="secondary" style="display:none">Continue</button>
+  </div>
+  <div id="save-note"></div>
+</div>
+
+<div class="screen" id="pause-screen">
+  <h1 style="font-size:44px">PAUSED</h1>
+  <h2>Jobs for Rio Vega</h2>
+  <div id="mission-list"></div>
+  <div>
+    <button id="resume-btn" type="button">Resume</button>
+    <button id="restart-btn" type="button" class="secondary">Restart</button>
+  </div>
+</div>
+
+<div class="screen" id="over-screen">
+  <h1 id="over-title" style="font-size:52px">WASTED</h1>
+  <p id="over-text"></p>
+  <div><button id="over-btn" type="button">Try again</button></div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
